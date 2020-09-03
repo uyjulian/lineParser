@@ -1,13 +1,20 @@
+#if 0
 #include <windows.h>
 #include "tp_stub.h"
+#endif
+#include "ncbind/ncbind.hpp"
 #include <stdio.h>
 #include <string>
+
+#define CP_UTF8 0
+#define CP_ACP 0
 
 using namespace std;
 
 /**
  * ログ出力用
  */
+#if 0
 static void log(const tjs_char *format, ...)
 {
 	va_list args;
@@ -17,6 +24,7 @@ static void log(const tjs_char *format, ...)
 	TVPAddLog(msg);
 	va_end(args);
 }
+#endif
 
 // -----------------------------------------------------------------
 
@@ -104,6 +112,7 @@ public:
 		}
 		int l = mbline.length();
 		if (l > 0 || c != EOF) {
+#if 0
 			wchar_t *buf = new wchar_t[l + 1];
 			l = MultiByteToWideChar(codepage, 0,
 									mbline.data(),
@@ -112,6 +121,10 @@ public:
 			buf[l] = '\0';
 			str = buf;
 			delete buf;
+#endif
+			tjs_string utf16line;
+			TVPUtf8ToUtf16( utf16line, mbline );
+			str += utf16line;
 			return true;
 		} else {
 			return false;
@@ -159,7 +172,7 @@ public:
 	}
 
 	bool getNextLine(ttstr &str) {
-		str = L"";
+		str = TJS_W("");
 		int c;
 		while ((c = getc()) != EOF && !endOfLine(c)) {
 			str += c;
@@ -226,8 +239,24 @@ delMember(iTJSDispatch2 *dispatch, const tjs_char *name)
 
 //---------------------------------------------------------------------------
 
+#undef TJS_NATIVE_CLASSID_NAME
 #define TJS_NATIVE_CLASSID_NAME ClassID_LineParser
 static tjs_int32 TJS_NATIVE_CLASSID_NAME = -1;
+
+//---------------------------------------------------------------------------
+// NC_LineParser
+//---------------------------------------------------------------------------
+class NC_LineParser : public tTJSNativeClass
+{
+public:
+	NC_LineParser();
+
+	static tjs_uint32 ClassID;
+
+private:
+	iTJSNativeInstance *CreateNativeInstance();
+};
+//---------------------------------------------------------------------------
 
 /**
  * LineParser
@@ -332,8 +361,8 @@ public:
 	 */
 	void parse(iTJSDispatch2 *objthis) {
 		iTJSDispatch2 *target = this->target ? this->target : objthis;
-		if (file && isValidMember(target, L"doLine")) {
-			iTJSDispatch2 *method = getMember(target, L"doLine");
+		if (file && isValidMember(target, TJS_W("doLine"))) {
+			iTJSDispatch2 *method = getMember(target, TJS_W("doLine"));
 			ttstr line;
 			while (getNextLine(line)) {
 				tTJSVariant var1 = tTJSVariant(line);
@@ -350,14 +379,24 @@ public:
 
 };
 
+#if 0
 static iTJSNativeInstance * TJS_INTF_METHOD Create_NI_LineParser()
 {
 	return new NI_LineParser();
 }
+#endif
 
+#if 0
 static iTJSDispatch2 * Create_NC_LineParser()
+#else
+tjs_uint32 NC_LineParser::ClassID = (tjs_uint32)-1;
+NC_LineParser::NC_LineParser() :
+	tTJSNativeClass(TJS_W("LineParser"))
+#endif
 {
+#if 0
 	tTJSNativeClassForPlugin * classobj = TJSCreateNativeClassForPlugin(TJS_W("LineParser"), Create_NI_LineParser);
+#endif
 
 	TJS_BEGIN_NATIVE_MEMBERS(/*TJS class name*/LineParser)
 
@@ -443,13 +482,43 @@ static iTJSDispatch2 * Create_NC_LineParser()
 	/*
 	 * この関数は classobj を返します。
 	 */
+#if 0
 	return classobj;
+#endif
 }
 
 #undef TJS_NATIVE_CLASSID_NAME
 
-//---------------------------------------------------------------------------
+#if 1
+iTJSNativeInstance *NC_LineParser::CreateNativeInstance()
+{
+	return new NI_LineParser();
+}
+#endif
 
+
+#define REGISTER_OBJECT(classname, instance) \
+	dsp = (instance); \
+	val = tTJSVariant(dsp/*, dsp*/); \
+	dsp->Release(); \
+	global->PropSet(TJS_MEMBERENSURE|TJS_IGNOREPROP, TJS_W(#classname), NULL, \
+		&val, global);
+
+//---------------------------------------------------------------------------
+static void PreRegistCallback()
+{
+	tTJSVariant val;
+	iTJSDispatch2 *dsp;
+	iTJSDispatch2 * global = TVPGetScriptDispatch();
+
+	if (global) {
+		REGISTER_OBJECT(KAGParser, new NC_LineParser());
+	}
+}
+
+NCB_PRE_REGIST_CALLBACK(PreRegistCallback);
+
+#if 0
 #pragma argsused
 int WINAPI DllEntryPoint(HINSTANCE hinst, unsigned long reason,
 	void* lpReserved)
@@ -468,7 +537,7 @@ extern "C" __declspec(dllexport) HRESULT __stdcall V2Link(iTVPFunctionExporter *
 	iTJSDispatch2 * global = TVPGetScriptDispatch();
 	
 	if (global) {
-		addMember(global, L"LineParser", Create_NC_LineParser());
+		addMember(global, TJS_W("LineParser"), Create_NC_LineParser());
 		global->Release();
 	}
 			
@@ -499,7 +568,7 @@ extern "C" __declspec(dllexport) HRESULT __stdcall V2Unlink()
 
 	// - global の DeleteMember メソッドを用い、オブジェクトを削除する
 	if (global)	{
-		delMember(global, L"LineParser");
+		delMember(global, TJS_W("LineParser"));
 		global->Release();
 	}
 
@@ -508,3 +577,4 @@ extern "C" __declspec(dllexport) HRESULT __stdcall V2Unlink()
 
 	return S_OK;
 }
+#endif
