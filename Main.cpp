@@ -159,7 +159,7 @@ public:
 	}
 
 	bool getNextLine(ttstr &str) {
-		str = L"";
+		str = TJS_W("");
 		int c;
 		while ((c = getc()) != EOF && !endOfLine(c)) {
 			str += c;
@@ -332,8 +332,8 @@ public:
 	 */
 	void parse(iTJSDispatch2 *objthis) {
 		iTJSDispatch2 *target = this->target ? this->target : objthis;
-		if (file && isValidMember(target, L"doLine")) {
-			iTJSDispatch2 *method = getMember(target, L"doLine");
+		if (file && isValidMember(target, TJS_W("doLine"))) {
+			iTJSDispatch2 *method = getMember(target, TJS_W("doLine"));
 			ttstr line;
 			while (getNextLine(line)) {
 				tTJSVariant var1 = tTJSVariant(line);
@@ -480,7 +480,7 @@ EXPORT(HRESULT) V2Link(iTVPFunctionExporter *exporter)
 	iTJSDispatch2 * global = TVPGetScriptDispatch();
 	
 	if (global) {
-		addMember(global, L"LineParser", Create_NC_LineParser());
+		addMember(global, TJS_W("LineParser"), Create_NC_LineParser());
 		global->Release();
 	}
 			
@@ -511,7 +511,7 @@ EXPORT(HRESULT) V2Unlink()
 
 	// - global の DeleteMember メソッドを用い、オブジェクトを削除する
 	if (global)	{
-		delMember(global, L"LineParser");
+		delMember(global, TJS_W("LineParser"));
 		global->Release();
 	}
 
