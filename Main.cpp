@@ -1,22 +1,12 @@
-#include <windows.h>
 #include "tp_stub.h"
 #include <stdio.h>
 #include <string>
 
 using namespace std;
 
-/**
- * ログ出力用
- */
-static void log(const tjs_char *format, ...)
-{
-	va_list args;
-	va_start(args, format);
-	tjs_char msg[1024];
-	_vsnwprintf(msg, 1024, format, args);
-	TVPAddLog(msg);
-	va_end(args);
-}
+#ifndef _WIN32
+typedef unsigned long ULONG;
+#endif
 
 // -----------------------------------------------------------------
 
@@ -28,16 +18,16 @@ public:
 
 class IFileStorage : public IFile {
 
-	IStream *in;
+	iTJSBinaryStream *in;
 	char buf[8192];
-	ULONG pos;
-	ULONG len;
+	tjs_uint pos;
+	tjs_uint len;
 	bool eofFlag;
-	int codepage;
+	bool utf8;
 	
 public:
-	IFileStorage(tTJSVariantString *filename, int codepage) : codepage(codepage) {
-		in = TVPCreateIStream(filename, TJS_BS_READ);
+	IFileStorage(tTJSVariantString *filename, bool utf8) : utf8(utf8) {
+		in = TVPCreateStream(filename, TJS_BS_READ);
 		if(!in) {
 			TVPThrowExceptionMessage((ttstr(TJS_W("cannot open : ")) + *filename).c_str());
 		}
@@ -48,7 +38,7 @@ public:
 
 	~IFileStorage() {
 		if (in) {
-			in->Release();
+			in->Destruct();
 			in = NULL;
 		}
 	}
@@ -61,12 +51,8 @@ public:
 				return EOF;
 			} else {
 				pos = 0;
-				if (in->Read(buf, sizeof buf, &len) == S_OK) {
-					eofFlag = len < sizeof buf;
-				} else {
-					eofFlag = true;
-					len = 0;
-				}
+				len = in->Read(buf, sizeof buf);
+				eofFlag = len < sizeof buf;
 				return getc();
 			}
 		}
@@ -104,14 +90,15 @@ public:
 		}
 		int l = mbline.length();
 		if (l > 0 || c != EOF) {
-			tjs_char *buf = new tjs_char[l + 1];
-			l = MultiByteToWideChar(codepage, 0,
-									mbline.data(),
-									mbline.length(),
-									buf, l);
-			buf[l] = '\0';
-			str = buf;
-			delete buf;
+			if (utf8) {
+				tjs_char *buf = new tjs_char[l + 1];
+				l = TVPUtf8ToWideCharString(mbline.data(), buf);
+				buf[l] = '\0';
+				str = buf;
+				delete buf;
+			} else {
+				str = tTJSString(mbline.data());
+			}
 			return true;
 		} else {
 			return false;
@@ -298,7 +285,7 @@ public:
 	 */
 	void initStorage(tTJSVariantString *filename, bool utf8=false) {
 		clear();
-		file = new IFileStorage(filename, utf8 ? CP_UTF8 : CP_ACP);
+		file = new IFileStorage(filename, utf8);
 		lineNo = 0;
 	}
 
@@ -450,16 +437,38 @@ static iTJSDispatch2 * Create_NC_LineParser()
 
 //---------------------------------------------------------------------------
 
-#define EXPORT(hr) extern "C" __declspec(dllexport) hr __stdcall
+#ifdef TVP_STATIC_PLUGIN
+
+#define EXPORT(hr) static hr STDCALL
+
+#else
+
+#if defined(_MSC_VER)
+    #define DLL_EXPORT  __declspec(dllexport)
+#else
+	#define DLL_EXPORT  __attribute__((visibility("default")))
+#endif
+
+#define EXPORT(hr) extern "C" DLL_EXPORT hr STDCALL
+
+#ifdef _WIN32
 
 #ifdef _MSC_VER
 # if defined(_M_AMD64) || defined(_M_X64)
 #  pragma comment(linker, "/EXPORT:V2Link")
 #  pragma comment(linker, "/EXPORT:V2Unlink")
 # else
-#pragma comment(linker, "/EXPORT:V2Link=_V2Link@4")
-#pragma comment(linker, "/EXPORT:V2Unlink=_V2Unlink@0")
+#  pragma comment(linker, "/EXPORT:V2Link=_V2Link@4")
+#  pragma comment(linker, "/EXPORT:V2Unlink=_V2Unlink@0")
+# endif
 #endif
+#ifdef __GNUC__
+asm (".section .drectve");
+# if defined(__x86_64__) || defined(__x86_64)
+asm (".ascii \" -export:V2Link=V2Link -export:V2Unlink=V2Unlink\"");
+# else
+asm (".ascii \" -export:V2Link=V2Link@4 -export:V2Unlink=V2Unlink@0\"");
+# endif
 #endif
 
 extern "C"
@@ -468,6 +477,9 @@ int WINAPI DllEntryPoint(HINSTANCE hinst, unsigned long reason,
 {
 	return 1;
 }
+#endif
+
+#endif
 
 //---------------------------------------------------------------------------
 static tjs_int GlobalRefCountAtInit = 0;
