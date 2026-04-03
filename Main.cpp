@@ -1,3 +1,6 @@
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "tp_stub.h"
 #include <stdio.h>
 #include <string>
@@ -18,16 +21,29 @@ public:
 
 class IFileStorage : public IFile {
 
+#if 0
 	iTJSBinaryStream *in;
+#else
+	IStream *in;
+#endif
 	char buf[8192];
+#if 0
 	tjs_uint pos;
 	tjs_uint len;
+#else
+	ULONG pos;
+	ULONG len;
+#endif
 	bool eofFlag;
 	bool utf8;
 	
 public:
 	IFileStorage(tTJSVariantString *filename, bool utf8) : utf8(utf8) {
+#if 0
 		in = TVPCreateStream(filename, TJS_BS_READ);
+#else
+		in = TVPCreateIStream(filename, TJS_BS_READ);
+#endif
 		if(!in) {
 			TVPThrowExceptionMessage((ttstr(TJS_W("cannot open : ")) + *filename).c_str());
 		}
@@ -38,7 +54,11 @@ public:
 
 	~IFileStorage() {
 		if (in) {
+#if 0
 			in->Destruct();
+#else
+			in->Release();
+#endif
 			in = NULL;
 		}
 	}
@@ -51,8 +71,17 @@ public:
 				return EOF;
 			} else {
 				pos = 0;
+#if 0
 				len = in->Read(buf, sizeof buf);
 				eofFlag = len < sizeof buf;
+#else
+				if (in->Read(buf, sizeof buf, &len) == S_OK) {
+					eofFlag = len < sizeof buf;
+				} else {
+					eofFlag = true;
+					len = 0;
+				}
+#endif
 				return getc();
 			}
 		}
@@ -437,6 +466,10 @@ static iTJSDispatch2 * Create_NC_LineParser()
 
 //---------------------------------------------------------------------------
 
+#ifndef STDCALL
+#define STDCALL __stdcall
+#endif
+
 #ifdef TVP_STATIC_PLUGIN
 
 #define EXPORT(hr) static hr STDCALL
@@ -462,6 +495,7 @@ static iTJSDispatch2 * Create_NC_LineParser()
 #  pragma comment(linker, "/EXPORT:V2Unlink=_V2Unlink@0")
 # endif
 #endif
+#if 0
 #ifdef __GNUC__
 asm (".section .drectve");
 # if defined(__x86_64__) || defined(__x86_64)
@@ -469,6 +503,7 @@ asm (".ascii \" -export:V2Link=V2Link -export:V2Unlink=V2Unlink\"");
 # else
 asm (".ascii \" -export:V2Link=V2Link@4 -export:V2Unlink=V2Unlink@0\"");
 # endif
+#endif
 #endif
 
 extern "C"
